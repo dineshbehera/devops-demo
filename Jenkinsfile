@@ -1,71 +1,61 @@
-
 pipeline {
     agent any
 
     environment {
         IMAGE_NAME = "devops-demo"
+        CONTAINER_NAME = "flask-container"
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                // use the pipeline-provided checkout so Jenkins uses the correct commit/workspace
-                checkout scm
+                git 'https://github.com/dineshbehera/devops-demo.git'
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                // create and use a virtualenv so we don't need sudo and avoid polluting the agent
-                sh """
-                python3 -m venv .venv || true
-                . .venv/bin/activate
-                pip install --upgrade pip
-                pip install -r requirements.txt
-                """
+                bat 'pip install -r requirements.txt'
             }
         }
 
         stage('Run Tests') {
             steps {
-                sh """
-                . .venv/bin/activate
-                pytest -q
-                """
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                // requires a SonarQube server configured in Jenkins with the name 'sonarqube'
-                withSonarQubeEnv('sonarqube') {
-                    sh 'sonar-scanner'
-                }
+                bat 'pytest'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh "docker build -t ${IMAGE_NAME} ."
+                bat 'docker build -t %IMAGE_NAME% .'
+            }
+        }
+
+        stage('Stop Old Container') {
+            steps {
+                bat '''
+                docker stop %CONTAINER_NAME% || exit 0
+                docker rm %CONTAINER_NAME% || exit 0
+                '''
             }
         }
 
         stage('Run Docker Container') {
             steps {
-                sh """
-                docker stop ${IMAGE_NAME}-container || true
-                docker rm ${IMAGE_NAME}-container || true
-                docker run -d --name ${IMAGE_NAME}-container -p 5000:5000 ${IMAGE_NAME}
-                """
+                bat '''
+                docker run -d ^
+                --name %CONTAINER_NAME% ^
+                -p 5000:5000 ^
+                %IMAGE_NAME%
+                '''
             }
         }
     }
 
     post {
         always {
-            // show containers / logs to help debugging
-            sh 'docker ps -a || true'
+            bat 'docker ps'
         }
     }
 }
