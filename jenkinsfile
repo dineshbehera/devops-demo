@@ -5,32 +5,39 @@ pipeline {
         IMAGE_NAME = "devops-demo"
     }
 
-    tools {
-        sonarQube 'sonar-scanner'
-    }
-
     stages {
 
         stage('Checkout') {
             steps {
-                git 'https://github.com/dineshbehera/devops-demo.git'
+                // use the pipeline-provided checkout so Jenkins uses the correct commit/workspace
+                checkout scm
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                sh 'pip install -r requirements.txt'
+                // create and use a virtualenv so we don't need sudo and avoid polluting the agent
+                sh """
+                python3 -m venv .venv || true
+                . .venv/bin/activate
+                pip install --upgrade pip
+                pip install -r requirements.txt
+                """
             }
         }
 
         stage('Run Tests') {
             steps {
-                sh 'pytest'
+                sh """
+                . .venv/bin/activate
+                pytest -q
+                """
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
+                // requires a SonarQube server configured in Jenkins with the name 'sonarqube'
                 withSonarQubeEnv('sonarqube') {
                     sh 'sonar-scanner'
                 }
@@ -39,18 +46,25 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t devops-demo .'
+                sh "docker build -t ${IMAGE_NAME} ."
             }
         }
 
         stage('Run Docker Container') {
             steps {
-                sh '''
-                docker stop devops-demo-container || true
-                docker rm devops-demo-container || true
-                docker run -d --name devops-demo-container -p 5000:5000 flask-demo
-                '''
+                sh """
+                docker stop ${IMAGE_NAME}-container || true
+                docker rm ${IMAGE_NAME}-container || true
+                docker run -d --name ${IMAGE_NAME}-container -p 5000:5000 ${IMAGE_NAME}
+                """
             }
+        }
+    }
+
+    post {
+        always {
+            // show containers / logs to help debugging
+            sh 'docker ps -a || true'
         }
     }
 }
