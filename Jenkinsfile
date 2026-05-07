@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         IMAGE_NAME = "devops-demo"
-        CONTAINER_NAME = "flask-container"
+        CONTAINER_NAME = "devops-demo"
     }
 
     stages {
